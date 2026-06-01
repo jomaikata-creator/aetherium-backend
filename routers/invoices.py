@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Invoice, Employee, Client
+from models import Invoice, Employee, Client, EmployeeRole
 from schemas import InvoiceResponse
 from auth import get_current_employee, get_visible_employee_ids
 
