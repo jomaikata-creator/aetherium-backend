@@ -1,4 +1,4 @@
-"""Project management + Stripe payment flows."""
+"""Project management + Stripe payment flows — scoped by role + team."""
 import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -9,28 +9,15 @@ from models import (
     Payment, PaymentMethod, PaymentStatus as PayStatus,
 )
 from schemas import ProjectCreate, ProjectUpdate, ProjectResponse, CheckoutRequest
-from auth import get_current_employee, require_admin_or_lead
+from auth import (
+    get_current_employee, require_admin_or_lead,
+    get_visible_employee_ids, can_edit_project,
+)
 from stripe_service import create_checkout_session
 
 MONTHLY_FEE = float(os.getenv("DEFAULT_MONTHLY_FEE", "300.0"))
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
-
-
-def _can_access_project(emp: Employee, project: Project, db: Session) -> bool:
-    if emp.role == EmployeeRole.admin:
-        return True
-    if project.client.assigned_to == emp.id:
-        return True
-    return False
-
-
-def _can_edit_project(emp: Employee, project: Project) -> bool:
-    if emp.role == EmployeeRole.admin:
-        return True
-    if emp.role == EmployeeRole.lead and project.client.assigned_to == emp.id:
-        return True
-    return False
 
 
 @router.post("", response_model=ProjectResponse, status_code=201)
@@ -43,7 +30,6 @@ def create_project(
     if not client:
         raise HTTPException(404, "Client not found")
 
-    # Lead can only create for own clients
     if emp.role == EmployeeRole.lead and client.assigned_to != emp.id:
         raise HTTPException(403, "Not your client")
 
@@ -77,11 +63,11 @@ def list_projects(
 ):
     if emp.role == EmployeeRole.admin:
         return db.query(Project).order_by(Project.created_at.desc()).all()
-    # Lead + creative: only projects of their clients
+    visible_ids = get_visible_employee_ids(emp, db)
     return (
         db.query(Project)
         .join(Client)
-        .filter(Client.assigned_to == emp.id)
+        .filter(Client.assigned_to.in_(visible_ids))
         .order_by(Project.created_at.desc())
         .all()
     )
@@ -96,8 +82,11 @@ def get_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found")
-    if not _can_access_project(emp, project, db):
-        raise HTTPException(403, "Not your project")
+
+    if emp.role != EmployeeRole.admin:
+        visible_ids = get_visible_employee_ids(emp, db)
+        if project.client.assigned_to not in visible_ids:
+            raise HTTPException(403, "Not in your team")
     return project
 
 
@@ -111,8 +100,8 @@ def update_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found")
-    if not _can_edit_project(emp, project):
-        raise HTTPException(403, "Only admin or assigned lead can edit")
+    if not can_edit_project(emp, project):
+        raise HTTPException(403, "Admin can edit any, lead can only edit own projects")
 
     if data.full_price is not None or data.deposit_amount is not None:
         fp = data.full_price if data.full_price is not None else project.full_price
@@ -123,14 +112,10 @@ def update_project(
         project.deposit_amount = dp
         project.remaining_amount = round(fp - dp, 2)
 
-    if data.project_name is not None:
-        project.project_name = data.project_name
-    if data.website_type is not None:
-        project.website_type = data.website_type
-    if data.features is not None:
-        project.features = data.features
-    if data.pages_count is not None:
-        project.pages_count = data.pages_count
+    for field in ("project_name", "website_type", "features", "pages_count"):
+        if getattr(data, field, None) is not None:
+            setattr(project, field, getattr(data, field))
+
     if data.status is not None:
         try:
             project.status = ProjectStatus(data.status)
@@ -152,7 +137,7 @@ def pay_deposit(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found")
-    if not _can_edit_project(emp, project):
+    if not can_edit_project(emp, project):
         raise HTTPException(403, "Not authorized")
     if project.deposit_amount <= 0:
         raise HTTPException(400, "No deposit required")
@@ -177,7 +162,6 @@ def pay_deposit(
     db.add(payment)
     project.status = ProjectStatus.deposit_pending
     db.commit()
-
     return {"checkout_url": session.url}
 
 
@@ -191,7 +175,7 @@ def pay_final(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found")
-    if not _can_edit_project(emp, project):
+    if not can_edit_project(emp, project):
         raise HTTPException(403, "Not authorized")
     if project.remaining_amount <= 0:
         raise HTTPException(400, "No remaining amount to pay")
@@ -216,7 +200,6 @@ def pay_final(
     db.add(payment)
     project.status = ProjectStatus.awaiting_final
     db.commit()
-
     return {"checkout_url": session.url}
 
 
@@ -230,7 +213,7 @@ def mark_bank_paid(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(404, "Project not found")
-    if not _can_edit_project(emp, project):
+    if not can_edit_project(emp, project):
         raise HTTPException(403, "Not authorized")
 
     payment = Payment(

@@ -1,19 +1,16 @@
-"""Client management — scoped by role."""
+"""Client management — scoped by role + team hierarchy."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Client, Employee, EmployeeRole
 from schemas import ClientCreate, ClientUpdate, ClientResponse
-from auth import get_current_employee, require_admin_or_lead
+from auth import (
+    get_current_employee, require_admin_or_lead,
+    get_visible_employee_ids, can_edit_client,
+)
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
-
-
-def _can_access_client(emp: Employee, client: Client) -> bool:
-    if emp.role == EmployeeRole.admin:
-        return True
-    return client.assigned_to == emp.id
 
 
 @router.post("", response_model=ClientResponse, status_code=201)
@@ -22,12 +19,10 @@ def create_client(
     db: Session = Depends(get_db),
     emp: Employee = Depends(require_admin_or_lead),
 ):
-    # If lead creates and doesn't specify assigned_to, assign to self
     assigned = data.assigned_to
     if emp.role == EmployeeRole.lead and assigned is None:
         assigned = emp.id
 
-    # Validate assigned employee exists
     if assigned is not None:
         target = db.query(Employee).filter(Employee.id == assigned).first()
         if not target:
@@ -47,9 +42,10 @@ def list_clients(
 ):
     if emp.role == EmployeeRole.admin:
         return db.query(Client).order_by(Client.created_at.desc()).all()
+    visible_ids = get_visible_employee_ids(emp, db)
     return (
         db.query(Client)
-        .filter(Client.assigned_to == emp.id)
+        .filter(Client.assigned_to.in_(visible_ids))
         .order_by(Client.created_at.desc())
         .all()
     )
@@ -64,8 +60,11 @@ def get_client(
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(404, "Client not found")
-    if not _can_access_client(emp, client):
-        raise HTTPException(403, "Not your client")
+
+    if emp.role != EmployeeRole.admin:
+        visible_ids = get_visible_employee_ids(emp, db)
+        if client.assigned_to not in visible_ids:
+            raise HTTPException(403, "Not in your team")
     return client
 
 
@@ -79,8 +78,8 @@ def update_client(
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(404, "Client not found")
-    if not _can_access_client(emp, client):
-        raise HTTPException(403, "Not your client")
+    if not can_edit_client(emp, client):
+        raise HTTPException(403, "You can only edit your own clients")
 
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(client, field, value)

@@ -71,9 +71,11 @@ class Employee(Base):
     full_name = Column(String, nullable=False)
     role = Column(SAEnum(EmployeeRole), default=EmployeeRole.creative, nullable=False)
     is_active = Column(Boolean, default=True)
+    manager_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships
+    manager = relationship("Employee", remote_side=[id], backref="team")
     clients = relationship("Client", back_populates="assigned_employee")
 
 

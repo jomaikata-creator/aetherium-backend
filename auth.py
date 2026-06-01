@@ -80,3 +80,39 @@ def require_admin_or_lead(emp: Employee = Depends(get_current_employee)) -> Empl
     if emp.role not in (EmployeeRole.admin, EmployeeRole.lead):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or lead only")
     return emp
+
+
+# ── Visibility helpers ───────────────────────
+
+def get_visible_employee_ids(emp: Employee, db: Session) -> list[int]:
+    """Return list of employee IDs this employee can view.
+    admin → all employees
+    lead → self + team (employees whose manager_id = lead.id)
+    creative → self only
+    """
+    if emp.role == EmployeeRole.admin:
+        return [e.id for e in db.query(Employee.id).all()]
+    if emp.role == EmployeeRole.lead:
+        team_ids = [emp.id] + [
+            e.id for e in db.query(Employee.id).filter(Employee.manager_id == emp.id).all()
+        ]
+        return team_ids
+    return [emp.id]
+
+
+def can_edit_client(emp: Employee, client) -> bool:
+    """Admin can edit any. Lead can edit their own clients. Creative cannot edit."""
+    if emp.role == EmployeeRole.admin:
+        return True
+    if emp.role == EmployeeRole.lead and client.assigned_to == emp.id:
+        return True
+    return False
+
+
+def can_edit_project(emp: Employee, project) -> bool:
+    """Admin can edit any. Lead can edit projects of their own clients. Creative cannot edit."""
+    if emp.role == EmployeeRole.admin:
+        return True
+    if emp.role == EmployeeRole.lead and project.client.assigned_to == emp.id:
+        return True
+    return False

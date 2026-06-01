@@ -22,11 +22,17 @@ def create_employee(
     if data.role not in ("admin", "lead", "creative"):
         raise HTTPException(400, "Role must be admin, lead, or creative")
 
+    if data.manager_id is not None:
+        mgr = db.query(Employee).filter(Employee.id == data.manager_id).first()
+        if not mgr:
+            raise HTTPException(400, "Manager not found")
+
     emp = Employee(
         email=data.email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         role=EmployeeRole(data.role),
+        manager_id=data.manager_id,
     )
     db.add(emp)
     db.commit()
@@ -80,6 +86,13 @@ def update_employee(
         emp.role = EmployeeRole(data.role)
     if data.is_active is not None:
         emp.is_active = data.is_active
+    if data.manager_id is not None:
+        if data.manager_id == employee_id:
+            raise HTTPException(400, "Cannot be your own manager")
+        mgr = db.query(Employee).filter(Employee.id == data.manager_id).first()
+        if not mgr:
+            raise HTTPException(400, "Manager not found")
+        emp.manager_id = data.manager_id
 
     db.commit()
     db.refresh(emp)

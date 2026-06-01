@@ -1,13 +1,13 @@
-"""Invoice listing and PDF download."""
+"""Invoice listing and PDF download — scoped by team visibility."""
 import os
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Invoice, Employee, EmployeeRole
+from models import Invoice, Employee, Client
 from schemas import InvoiceResponse
-from auth import get_current_employee
+from auth import get_current_employee, get_visible_employee_ids
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
@@ -19,11 +19,11 @@ def list_invoices(
 ):
     if emp.role == EmployeeRole.admin:
         return db.query(Invoice).order_by(Invoice.invoice_date.desc()).all()
+    visible_ids = get_visible_employee_ids(emp, db)
     return (
         db.query(Invoice)
-        .join(Invoice.project)
-        .join(Invoice.client)
-        .filter(Invoice.client.has(assigned_to=emp.id))
+        .join(Client, Invoice.client_id == Client.id)
+        .filter(Client.assigned_to.in_(visible_ids))
         .order_by(Invoice.invoice_date.desc())
         .all()
     )

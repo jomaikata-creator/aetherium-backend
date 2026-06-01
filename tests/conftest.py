@@ -21,6 +21,9 @@ def client():
     db_module.engine = engine
     db_module.SessionLocal.configure(bind=engine)
 
+    import main as main_module
+    main_module.engine = engine
+
     Base.metadata.create_all(bind=engine)
 
     session = db_module.SessionLocal()

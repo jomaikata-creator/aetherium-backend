@@ -12,7 +12,8 @@ class EmployeeCreate(BaseModel):
     email: str
     password: str
     full_name: str
-    role: str = "creative"  # admin | lead | creative
+    role: str = "creative"
+    manager_id: Optional[int] = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -21,6 +22,7 @@ class EmployeeUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    manager_id: Optional[int] = None
 
 
 class EmployeeResponse(BaseModel):
@@ -29,6 +31,7 @@ class EmployeeResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    manager_id: Optional[int] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
