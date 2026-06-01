@@ -32,12 +32,12 @@ def test_list_projects(client, admin_headers):
 def test_lead_cannot_create_for_other_clients(client, admin_headers):
     # Lead
     client.post("/api/employees", json={
-        "email": "lead3@test.com", "password": "x", "full_name": "L3", "role": "lead"
+        "email": "lead3@test.com", "password": "xxxxxx", "full_name": "L3", "role": "lead"
     }, headers=admin_headers)
     # Admin creates unassigned client
     client.post("/api/clients", json={"name": "Admin Client", "email": "ac@test.com"}, headers=admin_headers)
     # Login as lead
-    r = client.post("/api/auth/login", json={"email": "lead3@test.com", "password": "x"})
+    r = client.post("/api/auth/login", json={"email": "lead3@test.com", "password": "xxxxxx"})
     lead_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
     r = client.post("/api/projects", json={
         "client_id": 1, "project_name": "Hack", "full_price": 1000, "deposit_amount": 500,
@@ -49,13 +49,13 @@ def test_lead_sees_team_projects(client, admin_headers):
     """Lead can view projects of their creatives."""
     # Lead
     client.post("/api/employees", json={
-        "email": "leadV@test.com", "password": "x", "full_name": "LV", "role": "lead"
+        "email": "leadV@test.com", "password": "xxxxxx", "full_name": "LV", "role": "lead"
     }, headers=admin_headers)
     lead_id = 2
 
     # Creative under lead
     client.post("/api/employees", json={
-        "email": "crV@test.com", "password": "x", "full_name": "CV",
+        "email": "crV@test.com", "password": "xxxxxx", "full_name": "CV",
         "role": "creative", "manager_id": lead_id
     }, headers=admin_headers)
 
@@ -68,7 +68,7 @@ def test_lead_sees_team_projects(client, admin_headers):
         "client_id": 1, "project_name": "Team Project", "full_price": 2000, "deposit_amount": 1000,
     }, headers=admin_headers)
 
-    r = client.post("/api/auth/login", json={"email": "leadV@test.com", "password": "x"})
+    r = client.post("/api/auth/login", json={"email": "leadV@test.com", "password": "xxxxxx"})
     lead_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     r = client.get("/api/projects", headers=lead_headers)

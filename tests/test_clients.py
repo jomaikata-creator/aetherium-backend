@@ -19,13 +19,13 @@ def test_lead_team_visibility(client, admin_headers):
     """Lead sees their own clients + their creatives' clients."""
     # Create lead
     client.post("/api/employees", json={
-        "email": "lead2@test.com", "password": "x", "full_name": "L", "role": "lead"
+        "email": "lead2@test.com", "password": "xxxxxx", "full_name": "L", "role": "lead"
     }, headers=admin_headers)
     lead_id = 2
 
     # Create creative reporting to lead
     client.post("/api/employees", json={
-        "email": "creative@test.com", "password": "x", "full_name": "C",
+        "email": "creative@test.com", "password": "xxxxxx", "full_name": "C",
         "role": "creative", "manager_id": lead_id
     }, headers=admin_headers)
     creative_id = 3
@@ -40,7 +40,7 @@ def test_lead_team_visibility(client, admin_headers):
     }, headers=admin_headers)
 
     # Login as lead
-    r = client.post("/api/auth/login", json={"email": "lead2@test.com", "password": "x"})
+    r = client.post("/api/auth/login", json={"email": "lead2@test.com", "password": "xxxxxx"})
     lead_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     # Lead sees both
@@ -54,13 +54,13 @@ def test_lead_team_visibility(client, admin_headers):
 def test_creative_self_only(client, admin_headers):
     """Creative sees only their own clients."""
     client.post("/api/employees", json={
-        "email": "cr2@test.com", "password": "x", "full_name": "CR", "role": "creative"
+        "email": "cr2@test.com", "password": "xxxxxx", "full_name": "CR", "role": "creative"
     }, headers=admin_headers)
     creative_id = 2
 
     # Another creative
     client.post("/api/employees", json={
-        "email": "cr3@test.com", "password": "x", "full_name": "CR3", "role": "creative"
+        "email": "cr3@test.com", "password": "xxxxxx", "full_name": "CR3", "role": "creative"
     }, headers=admin_headers)
 
     client.post("/api/clients", json={
@@ -70,7 +70,7 @@ def test_creative_self_only(client, admin_headers):
         "assigned_to": 3, "name": "Other Client", "email": "other@test.com"
     }, headers=admin_headers)
 
-    r = client.post("/api/auth/login", json={"email": "cr2@test.com", "password": "x"})
+    r = client.post("/api/auth/login", json={"email": "cr2@test.com", "password": "xxxxxx"})
     cr_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     r = client.get("/api/clients", headers=cr_headers)
@@ -84,13 +84,13 @@ def test_lead_can_only_edit_own(client, admin_headers):
     """Lead can view team's clients but can only edit own."""
     # Lead
     client.post("/api/employees", json={
-        "email": "leadE@test.com", "password": "x", "full_name": "LE", "role": "lead"
+        "email": "leadE@test.com", "password": "xxxxxx", "full_name": "LE", "role": "lead"
     }, headers=admin_headers)
     lead_id = 2
 
     # Creative under lead
     client.post("/api/employees", json={
-        "email": "cre@test.com", "password": "x", "full_name": "CRE",
+        "email": "cre@test.com", "password": "xxxxxx", "full_name": "CRE",
         "role": "creative", "manager_id": lead_id
     }, headers=admin_headers)
 
@@ -103,7 +103,7 @@ def test_lead_can_only_edit_own(client, admin_headers):
         "assigned_to": 3, "name": "Team Client", "email": "team@test.com"
     }, headers=admin_headers)
 
-    r = client.post("/api/auth/login", json={"email": "leadE@test.com", "password": "x"})
+    r = client.post("/api/auth/login", json={"email": "leadE@test.com", "password": "xxxxxx"})
     lead_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     # Lead can edit own client

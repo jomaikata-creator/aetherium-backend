@@ -72,6 +72,8 @@ class Employee(Base):
     role = Column(SAEnum(EmployeeRole), default=EmployeeRole.creative, nullable=False)
     is_active = Column(Boolean, default=True)
     manager_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    password_reset_token = Column(String, nullable=True, unique=True)
+    password_reset_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships

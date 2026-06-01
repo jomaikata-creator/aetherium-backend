@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 class EmployeeCreate(BaseModel):
     email: str
-    password: str
+    password: Optional[str] = None  # optional — invite email handles password setup
     full_name: str
     role: str = "creative"
     manager_id: Optional[int] = None

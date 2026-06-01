@@ -1,4 +1,6 @@
-"""Employee management — admin only."""
+"""Employee management — admin only. Sends invite emails with password setup links."""
+import secrets
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -27,16 +29,34 @@ def create_employee(
         if not mgr:
             raise HTTPException(400, "Manager not found")
 
+    # Handle password: if provided, hash it; otherwise send invite
+    if data.password and len(data.password) >= 6:
+        password_hash_value = hash_password(data.password)
+        reset_token = None
+        reset_expires = None
+    else:
+        password_hash_value = ""
+        reset_token = secrets.token_urlsafe(32)
+        reset_expires = datetime.utcnow() + timedelta(hours=48)
+
     emp = Employee(
         email=data.email,
-        password_hash=hash_password(data.password),
+        password_hash=password_hash_value,
         full_name=data.full_name,
         role=EmployeeRole(data.role),
         manager_id=data.manager_id,
+        password_reset_token=reset_token,
+        password_reset_expires=reset_expires,
     )
     db.add(emp)
     db.commit()
     db.refresh(emp)
+
+    # Send invite email only if no password was set
+    if reset_token:
+        from email_service import send_invite_email
+        send_invite_email(emp.email, emp.full_name, reset_token, emp.role.value)
+
     return emp
 
 
