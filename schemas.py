@@ -91,6 +91,8 @@ class ProjectCreate(BaseModel):
     project_name: str
     full_price: float = Field(gt=0)
     deposit_amount: float = Field(ge=0)
+    creative_percent: float = Field(default=0, ge=0, le=100)
+    lead_percent: float = Field(default=0, ge=0, le=100)
     website_type: Optional[str] = None
     features: Optional[str] = None
     pages_count: Optional[int] = None
@@ -100,6 +102,8 @@ class ProjectUpdate(BaseModel):
     project_name: Optional[str] = None
     full_price: Optional[float] = None
     deposit_amount: Optional[float] = None
+    creative_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    lead_percent: Optional[float] = Field(default=None, ge=0, le=100)
     website_type: Optional[str] = None
     features: Optional[str] = None
     pages_count: Optional[int] = None
@@ -114,6 +118,8 @@ class ProjectResponse(BaseModel):
     deposit_amount: float
     remaining_amount: float
     monthly_fee: float
+    creative_percent: float
+    lead_percent: float
     website_type: Optional[str] = None
     features: Optional[str] = None
     pages_count: Optional[int] = None

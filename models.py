@@ -117,6 +117,9 @@ class Project(Base):
     remaining_amount = Column(Float, nullable=False, default=0.0)
     monthly_fee = Column(Float, nullable=False, default=300.0)
 
+    creative_percent = Column(Float, nullable=False, default=0.0)  # % for creative
+    lead_percent = Column(Float, nullable=False, default=0.0)      # % for team lead
+
     website_type = Column(String, nullable=True)
     features = Column(Text, nullable=True)
     pages_count = Column(Integer, nullable=True)

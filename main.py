@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, SessionLocal
 from models import Employee, EmployeeRole
 from auth import hash_password
-from routers import auth, employees, clients, projects, consultations, webhooks, invoices
+from routers import auth, employees, clients, projects, consultations, webhooks, invoices, reports
 
 
 def _seed_admin():
@@ -58,6 +58,7 @@ app.include_router(projects.router)
 app.include_router(consultations.router)
 app.include_router(webhooks.router)
 app.include_router(invoices.router)
+app.include_router(reports.router)
 
 
 @app.get("/api/health")

@@ -45,6 +45,8 @@ def create_project(
         deposit_amount=data.deposit_amount,
         remaining_amount=remaining,
         monthly_fee=MONTHLY_FEE,
+        creative_percent=data.creative_percent,
+        lead_percent=data.lead_percent,
         website_type=data.website_type,
         features=data.features,
         pages_count=data.pages_count,
@@ -115,6 +117,11 @@ def update_project(
     for field in ("project_name", "website_type", "features", "pages_count"):
         if getattr(data, field, None) is not None:
             setattr(project, field, getattr(data, field))
+
+    if data.creative_percent is not None:
+        project.creative_percent = data.creative_percent
+    if data.lead_percent is not None:
+        project.lead_percent = data.lead_percent
 
     if data.status is not None:
         try:
