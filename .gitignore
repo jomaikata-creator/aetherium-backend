@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Aetherium
+aetherium.db
+aetherium_v2.db
+invoices/*.pdf
+*.egg-info/
