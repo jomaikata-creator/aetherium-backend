@@ -23,9 +23,10 @@ class ProjectStatus(str, enum.Enum):
     quoted = "quoted"
     deposit_pending = "deposit_pending"
     building = "building"
+    feedback = "feedback"
     awaiting_final = "awaiting_final"
-    launched = "launched"
-    active_subscription = "active_subscription"
+    ready_to_deploy = "ready_to_deploy"
+    completed = "completed"
 
 
 class PaymentMethod(str, enum.Enum):

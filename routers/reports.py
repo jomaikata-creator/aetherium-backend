@@ -20,18 +20,18 @@ def payroll_report(
     
     For each project, creative gets creative_percent% of full_price,
     and the creative's lead gets lead_percent% of full_price.
-    Only projects launched or in active subscription are counted.
+    Only projects in ready_to_deploy or completed are counted.
     """
     try:
         year, mon = map(int, month.split("-"))
     except (ValueError, AttributeError):
         raise HTTPException(400, "Month must be YYYY-MM format")
 
-    # Eligible projects: launched or active_subscription
+    # Eligible projects: ready_to_deploy or completed
     projects = (
         db.query(Project)
         .filter(
-            Project.status.in_([ProjectStatus.launched, ProjectStatus.active_subscription]),
+            Project.status.in_([ProjectStatus.ready_to_deploy, ProjectStatus.completed]),
         )
         .all()
     )

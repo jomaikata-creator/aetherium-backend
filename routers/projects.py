@@ -287,7 +287,7 @@ def check_payment_status(
             if project.status == ProjectStatus.deposit_pending:
                 project.status = ProjectStatus.building
             elif project.status == ProjectStatus.awaiting_final:
-                project.status = ProjectStatus.launched
+                project.status = ProjectStatus.ready_to_deploy
             # Generate invoice
             from invoice_service import generate_invoice_pdf
             from models import Invoice, InvoiceType, InvoiceStatus
@@ -347,7 +347,7 @@ def mark_bank_paid(
     if project.status == ProjectStatus.deposit_pending:
         project.status = ProjectStatus.building
     elif project.status == ProjectStatus.awaiting_final:
-        project.status = ProjectStatus.launched
+        project.status = ProjectStatus.ready_to_deploy
 
     db.commit()
     return {"status": "paid", "project_status": project.status.value}

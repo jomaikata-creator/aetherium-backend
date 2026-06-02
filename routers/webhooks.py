@@ -99,7 +99,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if payment_type == "deposit":
             project.status = ProjectStatus.building
         elif payment_type == "final":
-            project.status = ProjectStatus.launched
+            project.status = ProjectStatus.ready_to_deploy
 
         amount = data.get("amount_total", 0) / 100
         _generate_invoice(db, project, amount, payment_type, data.get("invoice"))
