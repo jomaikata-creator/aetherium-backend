@@ -82,6 +82,23 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     if event_type == "checkout.session.completed":
         project_id = int(data.get("metadata", {}).get("project_id", 0))
         payment_type = data.get("metadata", {}).get("payment_type", "deposit")
+        checkout_type = data.get("metadata", {}).get("type", "")
+
+        # Handle subscription checkout
+        if checkout_type == "subscription":
+            sub = db.query(Subscription).filter(
+                Subscription.stripe_checkout_session_id == data.get("id")
+            ).first()
+            if sub:
+                sub.stripe_subscription_id = data.get("subscription")
+                sub.status = SubscriptionStatus.active
+                # Move project to maintenance
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project and project.status == ProjectStatus.completed:
+                    project.status = ProjectStatus.maintenance
+                db.commit()
+                print(f"[webhook] Subscription #{sub.id} paid — status active, project #{project_id} → maintenance")
+            return {"status": "received"}
 
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:

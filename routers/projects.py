@@ -15,6 +15,7 @@ from auth import (
     get_visible_employee_ids, can_edit_project,
 )
 from stripe_service import create_checkout_session
+from email_service import send_payment_email
 
 MONTHLY_FEE = float(os.getenv("DEFAULT_MONTHLY_FEE", "300.0"))
 
@@ -135,6 +136,56 @@ def update_project(
     return project
 
 
+def _create_one_time_payment(
+    project: Project,
+    amount: float,
+    payment_type: str,
+    payment_method: str,
+    success_url: str,
+    cancel_url: str,
+    db: Session,
+) -> Payment:
+    """Shared helper: create Stripe checkout + Payment record for deposit/final."""
+    method = PaymentMethod.stripe_card if payment_method == "card" else PaymentMethod.bank_transfer
+
+    session = create_checkout_session(
+        amount=amount,
+        currency="eur",
+        project_id=project.id,
+        client_email=project.client.email,
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"payment_type": payment_type},
+        payment_method=payment_method,
+    )
+
+    payment = Payment(
+        project_id=project.id,
+        stripe_payment_intent_id=session.payment_intent,
+        stripe_checkout_session_id=session.id,
+        amount=amount,
+        method=method,
+        status=PayStatus.pending,
+        checkout_url=session.url,
+    )
+    db.add(payment)
+
+    # Send the client an email with the checkout link
+    client = project.client
+    payment_label = "deposit" if payment_type == "deposit" else "final"
+    send_payment_email(
+        to_email=client.email,
+        client_name=client.name,
+        project_name=project.project_name,
+        amount=amount,
+        payment_type=payment_label,
+        checkout_url=session.url,
+    )
+    print(f"[payment] Email sent to {client.email} for {payment_label} payment on project #{project.id}")
+
+    return payment
+
+
 @router.post("/{project_id}/pay-deposit")
 def pay_deposit(
     project_id: int,
@@ -150,29 +201,18 @@ def pay_deposit(
     if project.deposit_amount <= 0:
         raise HTTPException(400, "No deposit required")
 
-    session = create_checkout_session(
+    _create_one_time_payment(
+        project=project,
         amount=project.deposit_amount,
-        currency="eur",
-        project_id=project.id,
-        client_email=project.client.email,
+        payment_type="deposit",
+        payment_method=req.payment_method,
         success_url=req.success_url,
         cancel_url=req.cancel_url,
-        metadata={"payment_type": "deposit"},
+        db=db,
     )
-
-    payment = Payment(
-        project_id=project.id,
-        stripe_payment_intent_id=session.payment_intent,
-        stripe_checkout_session_id=session.id,
-        amount=project.deposit_amount,
-        method=PaymentMethod.stripe_card,
-        status=PayStatus.pending,
-        checkout_url=session.url,
-    )
-    db.add(payment)
     project.status = ProjectStatus.deposit_pending
     db.commit()
-    return {"checkout_url": session.url}
+    return {"checkout_url": project.payments[-1].checkout_url}
 
 
 @router.post("/{project_id}/pay-final")
@@ -190,29 +230,18 @@ def pay_final(
     if project.remaining_amount <= 0:
         raise HTTPException(400, "No remaining amount to pay")
 
-    session = create_checkout_session(
+    _create_one_time_payment(
+        project=project,
         amount=project.remaining_amount,
-        currency="eur",
-        project_id=project.id,
-        client_email=project.client.email,
+        payment_type="final",
+        payment_method=req.payment_method,
         success_url=req.success_url,
         cancel_url=req.cancel_url,
-        metadata={"payment_type": "final"},
+        db=db,
     )
-
-    payment = Payment(
-        project_id=project.id,
-        stripe_payment_intent_id=session.payment_intent,
-        stripe_checkout_session_id=session.id,
-        amount=project.remaining_amount,
-        method=PaymentMethod.stripe_card,
-        status=PayStatus.pending,
-        checkout_url=session.url,
-    )
-    db.add(payment)
     project.status = ProjectStatus.awaiting_final
     db.commit()
-    return {"checkout_url": session.url}
+    return {"checkout_url": project.payments[-1].checkout_url}
 
 
 @router.get("/{project_id}/checkout-url")
@@ -236,6 +265,68 @@ def get_checkout_url(
         raise HTTPException(404, "No pending checkout URL found")
 
     return {"checkout_url": payment.checkout_url}
+
+
+@router.post("/{project_id}/regenerate-checkout")
+def regenerate_payment_checkout(
+    project_id: int,
+    req: CheckoutRequest,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(require_admin_or_lead),
+):
+    """Regenerate a fresh Stripe Checkout for a pending payment (expired link)."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if not can_edit_project(emp, project):
+        raise HTTPException(403, "Not authorized")
+
+    # Find the most recent pending payment for this project
+    payment = (
+        db.query(Payment)
+        .filter(
+            Payment.project_id == project_id,
+            Payment.status == PayStatus.pending,
+            Payment.checkout_url.isnot(None),
+        )
+        .order_by(Payment.created_at.desc())
+        .first()
+    )
+    if not payment:
+        raise HTTPException(404, "No pending payment to regenerate")
+
+    # Determine amount from payment record
+    session = create_checkout_session(
+        amount=payment.amount,
+        currency="eur",
+        project_id=project.id,
+        client_email=project.client.email,
+        success_url=req.success_url,
+        cancel_url=req.cancel_url,
+        metadata={"payment_type": "deposit" if payment.amount == project.deposit_amount else "final"},
+        payment_method=req.payment_method,
+    )
+
+    payment.stripe_checkout_session_id = session.id
+    payment.checkout_url = session.url
+    payment.stripe_payment_intent_id = session.payment_intent
+    db.commit()
+
+    # Resend the payment email with the fresh checkout link
+    client = project.client
+    is_deposit = payment.amount == project.deposit_amount
+    payment_label = "deposit" if is_deposit else "final"
+    send_payment_email(
+        to_email=client.email,
+        client_name=client.name,
+        project_name=project.project_name,
+        amount=payment.amount,
+        payment_type=payment_label,
+        checkout_url=session.url,
+    )
+    print(f"[payment] Regenerated checkout + resent email to {client.email} for project #{project.id}")
+
+    return {"checkout_url": session.url}
 
 
 def _next_invoice_number(db: Session) -> str:

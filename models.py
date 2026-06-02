@@ -27,6 +27,7 @@ class ProjectStatus(str, enum.Enum):
     awaiting_final = "awaiting_final"
     ready_to_deploy = "ready_to_deploy"
     completed = "completed"
+    maintenance = "maintenance"
 
 
 class PaymentMethod(str, enum.Enum):
@@ -42,6 +43,7 @@ class PaymentStatus(str, enum.Enum):
 
 
 class SubscriptionStatus(str, enum.Enum):
+    pending = "pending"
     active = "active"
     paused = "paused"
     canceled = "canceled"
@@ -164,9 +166,11 @@ class Subscription(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
 
     stripe_subscription_id = Column(String, nullable=True)
+    stripe_checkout_session_id = Column(String, nullable=True)
+    checkout_url = Column(String, nullable=True)
     monthly_fee = Column(Float, nullable=False)
 
-    status = Column(SAEnum(SubscriptionStatus), default=SubscriptionStatus.active, nullable=False)
+    status = Column(SAEnum(SubscriptionStatus), default=SubscriptionStatus.pending, nullable=False)
     start_date = Column(DateTime, default=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="subscriptions")

@@ -197,3 +197,4 @@ class CheckoutRequest(BaseModel):
     project_id: int
     success_url: str = "http://localhost:5173/success"
     cancel_url: str = "http://localhost:5173/cancel"
+    payment_method: str = "card"  # "card" or "bank_transfer"
