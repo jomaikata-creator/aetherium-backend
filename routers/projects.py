@@ -1,5 +1,6 @@
 """Project management + Stripe payment flows — scoped by role + team."""
 import os
+import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -233,6 +234,87 @@ def get_checkout_url(
         raise HTTPException(404, "No pending checkout URL found")
 
     return {"checkout_url": payment.checkout_url}
+
+
+def _next_invoice_number(db: Session) -> str:
+    """Generate next sequential invoice number: YYYY-NNNN."""
+    from models import Invoice as Inv
+    year = datetime.datetime.utcnow().year
+    last = (
+        db.query(Inv)
+        .filter(Inv.invoice_number.like(f"{year}-%"))
+        .order_by(Inv.invoice_number.desc())
+        .first()
+    )
+    seq = int(last.invoice_number.split("-")[1]) + 1 if last else 1
+    return f"{year}-{seq:04d}"
+
+
+@router.post("/{project_id}/check-payment")
+def check_payment_status(
+    project_id: int,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(get_current_employee),
+):
+    """Check Stripe for the latest payment status and update the DB."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.project_id == project_id, Payment.stripe_payment_intent_id.isnot(None))
+        .order_by(Payment.created_at.desc())
+        .first()
+    )
+    if not payment or not payment.stripe_payment_intent_id:
+        return {"status": "no_payment_found"}
+
+    # Query Stripe for the actual payment intent status
+    try:
+        import stripe as stripe_lib
+        intent = stripe_lib.PaymentIntent.retrieve(payment.stripe_payment_intent_id)
+
+        if intent.status == "succeeded" and payment.status != PayStatus.paid:
+            payment.status = PayStatus.paid
+            # Update project status based on payment type
+            if project.status == ProjectStatus.deposit_pending:
+                project.status = ProjectStatus.building
+            elif project.status == ProjectStatus.awaiting_final:
+                project.status = ProjectStatus.launched
+            # Generate invoice
+            from invoice_service import generate_invoice_pdf
+            from models import Invoice, InvoiceType, InvoiceStatus
+            inv_num = _next_invoice_number(db)
+            client = project.client
+            pdf_path = generate_invoice_pdf(
+                invoice_number=inv_num,
+                invoice_date=datetime.datetime.utcnow(),
+                client_name=client.name, client_company=client.company_name,
+                client_eik=client.eik, client_mol=client.mol,
+                client_vat=client.vat_number, client_address=client.address,
+                project_name=project.project_name,
+                service_description="Web Design & Development",
+                amount=payment.amount, currency="EUR",
+                invoice_type="deposit" if project.status == ProjectStatus.deposit_pending else "final",
+            )
+            invoice = Invoice(
+                invoice_number=inv_num, invoice_date=datetime.datetime.utcnow(),
+                client_id=client.id, project_id=project.id,
+                eik=client.eik, mol=client.mol, vat_number=client.vat_number,
+                amount=payment.amount, currency="EUR",
+                type=InvoiceType("deposit" if payment.amount == project.deposit_amount else "final"),
+                stripe_reference_id=intent.id, pdf_path=pdf_path,
+                status=InvoiceStatus.issued,
+            )
+            db.add(invoice)
+            db.commit()
+            db.refresh(project)
+            return {"status": "paid", "project_status": project.status.value}
+
+        return {"status": intent.status}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 @router.post("/{project_id}/mark-bank-paid")
