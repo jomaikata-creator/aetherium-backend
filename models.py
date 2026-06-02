@@ -144,6 +144,7 @@ class Payment(Base):
 
     stripe_payment_intent_id = Column(String, nullable=True)
     stripe_invoice_id = Column(String, nullable=True)
+    checkout_url = Column(String, nullable=True)
 
     amount = Column(Float, nullable=False)
     method = Column(SAEnum(PaymentMethod), nullable=False)

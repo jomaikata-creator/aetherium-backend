@@ -165,6 +165,7 @@ def pay_deposit(
         amount=project.deposit_amount,
         method=PaymentMethod.stripe_card,
         status=PayStatus.pending,
+        checkout_url=session.url,
     )
     db.add(payment)
     project.status = ProjectStatus.deposit_pending
@@ -203,11 +204,35 @@ def pay_final(
         amount=project.remaining_amount,
         method=PaymentMethod.stripe_card,
         status=PayStatus.pending,
+        checkout_url=session.url,
     )
     db.add(payment)
     project.status = ProjectStatus.awaiting_final
     db.commit()
     return {"checkout_url": session.url}
+
+
+@router.get("/{project_id}/checkout-url")
+def get_checkout_url(
+    project_id: int,
+    db: Session = Depends(get_db),
+    emp: Employee = Depends(get_current_employee),
+):
+    """Get the latest pending Stripe checkout URL for a project."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.project_id == project_id, Payment.status == PayStatus.pending, Payment.checkout_url.isnot(None))
+        .order_by(Payment.created_at.desc())
+        .first()
+    )
+    if not payment:
+        raise HTTPException(404, "No pending checkout URL found")
+
+    return {"checkout_url": payment.checkout_url}
 
 
 @router.post("/{project_id}/mark-bank-paid")
