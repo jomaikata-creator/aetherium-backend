@@ -1,7 +1,7 @@
 """Project management + Stripe payment flows — scoped by role + team."""
 import os
 import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -62,19 +62,44 @@ def create_project(
 
 @router.get("", response_model=list[ProjectResponse])
 def list_projects(
+    status: str | None = Query(None, description="Filter by project status"),
+    search: str | None = Query(None, description="Search in project name and client name"),
+    sort_by: str = Query("created_at", description="Sort field: created_at, full_price, project_name"),
+    sort_order: str = Query("desc", description="Sort direction: asc or desc"),
     db: Session = Depends(get_db),
     emp: Employee = Depends(get_current_employee),
 ):
-    if emp.role == EmployeeRole.admin:
-        return db.query(Project).order_by(Project.created_at.desc()).all()
-    visible_ids = get_visible_employee_ids(emp, db)
-    return (
-        db.query(Project)
-        .join(Client)
-        .filter(Client.assigned_to.in_(visible_ids))
-        .order_by(Project.created_at.desc())
-        .all()
-    )
+    query = db.query(Project)
+
+    # Role-based scoping
+    if emp.role != EmployeeRole.admin:
+        visible_ids = get_visible_employee_ids(emp, db)
+        query = query.join(Client).filter(Client.assigned_to.in_(visible_ids))
+
+    # Status filter
+    if status:
+        try:
+            ps = ProjectStatus(status)
+            query = query.filter(Project.status == ps)
+        except ValueError:
+            pass  # ignore invalid status
+
+    # Search filter
+    if search:
+        like = f"%{search}%"
+        query = query.outerjoin(Client, Project.client_id == Client.id).filter(
+            (Project.project_name.ilike(like)) |
+            (Client.name.ilike(like))
+        )
+
+    # Sort
+    sort_col = getattr(Project, sort_by, Project.created_at)
+    if sort_order == "asc":
+        query = query.order_by(sort_col.asc())
+    else:
+        query = query.order_by(sort_col.desc())
+
+    return query.all()
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
