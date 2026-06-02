@@ -163,6 +163,7 @@ def pay_deposit(
     payment = Payment(
         project_id=project.id,
         stripe_payment_intent_id=session.payment_intent,
+        stripe_checkout_session_id=session.id,
         amount=project.deposit_amount,
         method=PaymentMethod.stripe_card,
         status=PayStatus.pending,
@@ -202,6 +203,7 @@ def pay_final(
     payment = Payment(
         project_id=project.id,
         stripe_payment_intent_id=session.payment_intent,
+        stripe_checkout_session_id=session.id,
         amount=project.remaining_amount,
         method=PaymentMethod.stripe_card,
         status=PayStatus.pending,
@@ -263,19 +265,23 @@ def check_payment_status(
 
     payment = (
         db.query(Payment)
-        .filter(Payment.project_id == project_id, Payment.stripe_payment_intent_id.isnot(None))
+        .filter(
+            Payment.project_id == project_id,
+            Payment.stripe_checkout_session_id.isnot(None),
+            Payment.status == PayStatus.pending,
+        )
         .order_by(Payment.created_at.desc())
         .first()
     )
-    if not payment or not payment.stripe_payment_intent_id:
-        return {"status": "no_payment_found"}
+    if not payment or not payment.stripe_checkout_session_id:
+        return {"status": "no_pending_payment"}
 
-    # Query Stripe for the actual payment intent status
+    # Query Stripe for the checkout session status
     try:
         import stripe as stripe_lib
-        intent = stripe_lib.PaymentIntent.retrieve(payment.stripe_payment_intent_id)
+        session = stripe_lib.checkout.Session.retrieve(payment.stripe_checkout_session_id)
 
-        if intent.status == "succeeded" and payment.status != PayStatus.paid:
+        if session.payment_status == "paid" and payment.status != PayStatus.paid:
             payment.status = PayStatus.paid
             # Update project status based on payment type
             if project.status == ProjectStatus.deposit_pending:
@@ -304,7 +310,7 @@ def check_payment_status(
                 eik=client.eik, mol=client.mol, vat_number=client.vat_number,
                 amount=payment.amount, currency="EUR",
                 type=InvoiceType("deposit" if payment.amount == project.deposit_amount else "final"),
-                stripe_reference_id=intent.id, pdf_path=pdf_path,
+                stripe_reference_id=session.id, pdf_path=pdf_path,
                 status=InvoiceStatus.issued,
             )
             db.add(invoice)
@@ -312,7 +318,7 @@ def check_payment_status(
             db.refresh(project)
             return {"status": "paid", "project_status": project.status.value}
 
-        return {"status": intent.status}
+        return {"status": session.payment_status}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
