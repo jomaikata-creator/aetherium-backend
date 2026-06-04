@@ -80,8 +80,8 @@ def test_creative_self_only(client, admin_headers):
     assert "Other Client" not in names
 
 
-def test_lead_can_only_edit_own(client, admin_headers):
-    """Lead can view team's clients but can only edit own."""
+def test_lead_cannot_edit_any(client, admin_headers):
+    """Lead is read-only — cannot edit own or team clients."""
     # Lead
     client.post("/api/employees", json={
         "email": "leadE@test.com", "password": "xxxxxx", "full_name": "LE", "role": "lead"
@@ -106,9 +106,9 @@ def test_lead_can_only_edit_own(client, admin_headers):
     r = client.post("/api/auth/login", json={"email": "leadE@test.com", "password": "xxxxxx"})
     lead_headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
-    # Lead can edit own client
+    # Lead cannot edit own client (read-only)
     r = client.patch("/api/clients/1", json={"name": "Renamed"}, headers=lead_headers)
-    assert r.status_code == 200
+    assert r.status_code == 403
 
     # Lead cannot edit team's client
     r = client.patch("/api/clients/2", json={"name": "Hacked"}, headers=lead_headers)

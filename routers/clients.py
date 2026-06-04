@@ -6,7 +6,7 @@ from database import get_db
 from models import Client, Employee, EmployeeRole
 from schemas import ClientCreate, ClientUpdate, ClientResponse
 from auth import (
-    get_current_employee, require_admin_or_lead,
+    get_current_employee, require_admin,
     get_visible_employee_ids, can_edit_client,
 )
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/clients", tags=["clients"])
 def create_client(
     data: ClientCreate,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     assigned = data.assigned_to
     if emp.role == EmployeeRole.lead and assigned is None:
@@ -73,7 +73,7 @@ def update_client(
     client_id: int,
     data: ClientUpdate,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:

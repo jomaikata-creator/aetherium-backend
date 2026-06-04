@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Employee, EmployeeRole
 from schemas import EmployeeCreate, EmployeeUpdate, EmployeeResponse
-from auth import hash_password, get_current_employee, require_admin
+from auth import hash_password, get_current_employee, require_admin, get_visible_employee_ids
 
 router = APIRouter(prefix="/api/employees", tags=["employees"])
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/employees", tags=["employees"])
 def create_employee(
     data: EmployeeCreate,
     db: Session = Depends(get_db),
-    _admin: Employee = Depends(require_admin),
+    emp: Employee = Depends(require_admin),
 ):
     if db.query(Employee).filter(Employee.email == data.email).first():
         raise HTTPException(400, "Email already exists")
@@ -63,21 +63,35 @@ def create_employee(
 @router.get("", response_model=list[EmployeeResponse])
 def list_employees(
     db: Session = Depends(get_db),
-    _admin: Employee = Depends(require_admin),
+    emp: Employee = Depends(get_current_employee),
 ):
-    return db.query(Employee).order_by(Employee.created_at.desc()).all()
+    if emp.role == EmployeeRole.admin:
+        return db.query(Employee).order_by(Employee.created_at.desc()).all()
+    visible_ids = get_visible_employee_ids(emp, db)
+    return (
+        db.query(Employee)
+        .filter(Employee.id.in_(visible_ids))
+        .order_by(Employee.created_at.desc())
+        .all()
+    )
 
 
 @router.get("/{employee_id}", response_model=EmployeeResponse)
 def get_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    _admin: Employee = Depends(require_admin),
+    current: Employee = Depends(get_current_employee),
 ):
-    emp = db.query(Employee).filter(Employee.id == employee_id).first()
-    if not emp:
+    target = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not target:
         raise HTTPException(404, "Employee not found")
-    return emp
+
+    if current.role != EmployeeRole.admin:
+        visible_ids = get_visible_employee_ids(current, db)
+        if target.id not in visible_ids:
+            raise HTTPException(403, "Not in your team")
+
+    return target
 
 
 @router.patch("/{employee_id}", response_model=EmployeeResponse)
@@ -85,7 +99,7 @@ def update_employee(
     employee_id: int,
     data: EmployeeUpdate,
     db: Session = Depends(get_db),
-    _admin: Employee = Depends(require_admin),
+    emp: Employee = Depends(require_admin),
 ):
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:

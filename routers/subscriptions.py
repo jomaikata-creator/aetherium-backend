@@ -11,7 +11,7 @@ from models import (
     Subscription, SubscriptionStatus,
 )
 from schemas import CheckoutRequest
-from auth import get_current_employee, require_admin_or_lead, get_visible_employee_ids
+from auth import get_current_employee, require_admin, get_visible_employee_ids
 from stripe_service import create_subscription_checkout_session
 from email_service import send_subscription_email
 
@@ -57,7 +57,7 @@ def list_subscriptions(
 def start_subscription(
     project_id: int,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     """Create a Stripe Checkout Session for a recurring subscription, save it, and email the client."""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -139,7 +139,7 @@ def get_subscription_checkout_url(
 def resend_subscription_email(
     project_id: int,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     """Resend the subscription payment email to the client."""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -170,7 +170,7 @@ def resend_subscription_email(
 def repopulate_subscription_checkout(
     project_id: int,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     """Generate a fresh Stripe Checkout Session for a pending subscription (e.g. expired link)."""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -222,7 +222,7 @@ def repopulate_subscription_checkout(
 def pause_subscription(
     subscription_id: int,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
     if not sub:
@@ -247,7 +247,7 @@ def pause_subscription(
 def resume_subscription(
     subscription_id: int,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
     if not sub:
@@ -272,7 +272,7 @@ def resume_subscription(
 def cancel_subscription(
     subscription_id: int,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
     if not sub:

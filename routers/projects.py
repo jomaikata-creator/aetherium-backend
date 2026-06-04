@@ -11,7 +11,7 @@ from models import (
 )
 from schemas import ProjectCreate, ProjectUpdate, ProjectResponse, CheckoutRequest
 from auth import (
-    get_current_employee, require_admin_or_lead,
+    get_current_employee, require_admin,
     get_visible_employee_ids, can_edit_project,
 )
 from stripe_service import create_checkout_session
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 def create_project(
     data: ProjectCreate,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     client = db.query(Client).filter(Client.id == data.client_id).first()
     if not client:
@@ -124,7 +124,7 @@ def update_project(
     project_id: int,
     data: ProjectUpdate,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(get_current_employee),
+    emp: Employee = Depends(require_admin),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -216,7 +216,7 @@ def pay_deposit(
     project_id: int,
     req: CheckoutRequest,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -245,7 +245,7 @@ def pay_final(
     project_id: int,
     req: CheckoutRequest,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -297,7 +297,7 @@ def regenerate_payment_checkout(
     project_id: int,
     req: CheckoutRequest,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     """Regenerate a fresh Stripe Checkout for a pending payment (expired link)."""
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -444,7 +444,7 @@ def mark_bank_paid(
     project_id: int,
     amount: float = 0,
     db: Session = Depends(get_db),
-    emp: Employee = Depends(require_admin_or_lead),
+    emp: Employee = Depends(require_admin),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
