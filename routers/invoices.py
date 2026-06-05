@@ -1,7 +1,7 @@
 """Invoice listing and PDF download — scoped by team visibility."""
 import os
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -48,10 +48,17 @@ def download_invoice_pdf(
     emp: Employee = Depends(get_current_employee),
 ):
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not inv or not inv.pdf_path or not os.path.exists(inv.pdf_path):
-        raise HTTPException(404, "PDF not found")
-    return FileResponse(
-        inv.pdf_path,
-        media_type="application/pdf",
-        filename=f"invoice-{inv.invoice_number}.pdf",
-    )
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+
+    if inv.stripe_hosted_url:
+        return RedirectResponse(url=inv.stripe_hosted_url)
+
+    if inv.pdf_path and os.path.exists(inv.pdf_path):
+        return FileResponse(
+            inv.pdf_path,
+            media_type="application/pdf",
+            filename=f"invoice-{inv.invoice_number}.pdf",
+        )
+
+    raise HTTPException(404, "PDF not found")

@@ -183,6 +183,7 @@ class InvoiceResponse(BaseModel):
     currency: str
     type: str
     stripe_reference_id: Optional[str] = None
+    stripe_hosted_url: Optional[str] = None
     pdf_path: Optional[str] = None
     status: str
 

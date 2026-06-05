@@ -8,6 +8,7 @@ from database import get_db
 from models import (
     Employee, EmployeeRole, Client, Project, ProjectStatus,
     Payment, PaymentMethod, PaymentStatus as PayStatus,
+    Invoice, InvoiceType, InvoiceStatus,
 )
 from schemas import ProjectCreate, ProjectUpdate, ProjectResponse, CheckoutRequest
 from auth import (
@@ -15,7 +16,7 @@ from auth import (
     get_visible_employee_ids, can_edit_project,
 )
 from stripe_service import create_checkout_session
-from email_service import send_payment_email
+from email_service import send_payment_email, send_invoice_email
 
 MONTHLY_FEE = float(os.getenv("DEFAULT_MONTHLY_FEE", "300.0"))
 
@@ -399,39 +400,58 @@ def check_payment_status(
 
         if session.payment_status == "paid" and payment.status != PayStatus.paid:
             payment.status = PayStatus.paid
+            payment.stripe_invoice_id = session.invoice
             # Update project status based on payment type
             if project.status == ProjectStatus.deposit_pending:
                 project.status = ProjectStatus.building
             elif project.status == ProjectStatus.awaiting_final:
                 project.status = ProjectStatus.ready_to_deploy
-            # Generate invoice
-            from invoice_service import generate_invoice_pdf
-            from models import Invoice, InvoiceType, InvoiceStatus
-            inv_num = _next_invoice_number(db)
+
+            # Retrieve Stripe invoice for hosted URL
+            stripe_hosted_url = None
+            if session.invoice:
+                try:
+                    stripe_inv = stripe_lib.Invoice.retrieve(session.invoice)
+                    stripe_hosted_url = stripe_inv.hosted_invoice_url
+                except Exception as e:
+                    print(f"[check-payment] Failed to retrieve Stripe invoice {session.invoice}: {e}")
+
+            # Generate invoice record (using Stripe invoice, not custom PDF)
             client = project.client
-            pdf_path = generate_invoice_pdf(
-                invoice_number=inv_num,
-                invoice_date=datetime.datetime.utcnow(),
-                client_name=client.name, client_company=client.company_name,
-                client_eik=client.eik, client_mol=client.mol,
-                client_vat=client.vat_number, client_address=client.address,
-                project_name=project.project_name,
-                service_description="Web Design & Development",
-                amount=payment.amount, currency="EUR",
-                invoice_type="deposit" if project.status == ProjectStatus.deposit_pending else "final",
-            )
+            inv_num = _next_invoice_number(db)
+            inv_type = "deposit" if payment.amount == project.deposit_amount else "final"
             invoice = Invoice(
                 invoice_number=inv_num, invoice_date=datetime.datetime.utcnow(),
                 client_id=client.id, project_id=project.id,
                 eik=client.eik, mol=client.mol, vat_number=client.vat_number,
                 amount=payment.amount, currency="EUR",
-                type=InvoiceType("deposit" if payment.amount == project.deposit_amount else "final"),
-                stripe_reference_id=session.id, pdf_path=pdf_path,
+                type=InvoiceType(inv_type),
+                stripe_reference_id=session.invoice,
+                stripe_hosted_url=stripe_hosted_url,
                 status=InvoiceStatus.issued,
             )
             db.add(invoice)
             db.commit()
             db.refresh(project)
+
+            # Send invoice email
+            try:
+                send_invoice_email(
+                    to_email=client.email,
+                    client_name=client.name,
+                    project_name=project.project_name,
+                    amount=payment.amount,
+                    currency="EUR",
+                    invoice_number=inv_num,
+                    invoice_date=datetime.datetime.utcnow().strftime("%d.%m.%Y"),
+                    invoice_type=inv_type,
+                    service_description="Web Design & Development",
+                    stripe_hosted_url=stripe_hosted_url,
+                )
+                print(f"[check-payment] Invoice email sent to {client.email}")
+            except Exception as e:
+                print(f"[check-payment] Failed to send invoice email: {e}")
+
             return {"status": "paid", "project_status": project.status.value}
 
         return {"status": session.payment_status}

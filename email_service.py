@@ -326,3 +326,146 @@ def send_payment_email(
 </html>"""
 
     return _send_email(to_email, subject, html)
+
+
+def send_invoice_email(
+    to_email: str,
+    client_name: str,
+    project_name: str,
+    amount: float,
+    currency: str,
+    invoice_number: str,
+    invoice_date: str,
+    invoice_type: str,
+    service_description: str,
+    stripe_hosted_url: str | None = None,
+):
+    """Send a light-themed invoice email with the same design as the payment request."""
+    type_labels = {"deposit": "Deposit Invoice", "final": "Final Invoice", "monthly": "Monthly Invoice"}
+    type_label = type_labels.get(invoice_type, "Invoice")
+
+    subject = f"Invoice {invoice_number} for {project_name}"
+
+    invoice_url_section = ""
+    if stripe_hosted_url:
+        invoice_url_section = f"""
+    <!-- View Invoice button -->
+    <div style="text-align:center;margin:0 0 24px">
+      <a href="{stripe_hosted_url}" style="display:inline-block;padding:16px 48px;background:#6c5ce7;color:#ffffff;text-decoration:none;border-radius:12px;font-size:16px;font-weight:600;letter-spacing:0.2px;box-shadow:0 4px 14px rgba(108,92,231,0.3)">
+        View Invoice &rarr;
+      </a>
+    </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f2f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f8;padding:48px 16px">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06)">
+
+  <!-- Header accent bar -->
+  <tr><td style="height:6px;background:linear-gradient(90deg,#6c5ce7,#a29bfe,#fd79a8)"></td></tr>
+
+  <!-- Logo area -->
+  <tr><td style="padding:40px 48px 0;text-align:center">
+    <table cellpadding="0" cellspacing="0" style="margin:0 auto">
+    <tr>
+      <td style="width:44px;height:44px;background:#6c5ce7;border-radius:12px;text-align:center;vertical-align:middle;font-size:20px;font-weight:700;color:#fff;line-height:44px">A</td>
+      <td style="padding-left:12px;vertical-align:middle">
+        <span style="font-size:20px;font-weight:700;color:#1a1a2e;letter-spacing:-0.3px">Aetherium</span>
+        <span style="display:block;font-size:12px;color:#8888a0;font-weight:400;margin-top:-2px">Web Design Studio</span>
+      </td>
+    </tr>
+    </table>
+  </td></tr>
+
+  <!-- Divider -->
+  <tr><td style="padding:24px 48px 0"><div style="height:1px;background:#eaecf0"></div></td></tr>
+
+  <!-- Body -->
+  <tr><td style="padding:32px 48px">
+    <h2 style="margin:0;color:#1a1a2e;font-size:22px;font-weight:700;letter-spacing:-0.3px">
+      Hi {client_name},
+    </h2>
+    <p style="margin:16px 0 0;color:#555574;font-size:15px;line-height:1.7">
+      Thank you! Your payment for <strong style="color:#1a1a2e">{project_name}</strong> has been received.
+      Your invoice is below.
+    </p>
+
+    <!-- Invoice card -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;background:#f8f9fc;border-radius:14px;border:1px solid #eaecf0">
+    <tr><td style="padding:24px 28px">
+
+      <!-- Invoice header -->
+      <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td>
+          <span style="font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Invoice</span>
+          <span style="display:block;font-size:16px;color:#1a1a2e;font-weight:600;margin-top:2px">#{invoice_number}</span>
+        </td>
+        <td style="text-align:right">
+          <span style="font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Date</span>
+          <span style="display:block;font-size:14px;color:#555574;margin-top:2px">{invoice_date}</span>
+        </td>
+      </tr>
+      </table>
+
+      <div style="height:1px;background:#eaecf0;margin:16px 0"></div>
+
+      <!-- Service -->
+      <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td>
+          <span style="font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Service</span>
+          <span style="display:block;font-size:14px;color:#555574;margin-top:2px">{service_description}</span>
+          <span style="display:block;font-size:13px;color:#8888a0;margin-top:2px">{project_name}</span>
+        </td>
+      </tr>
+      </table>
+
+      <div style="height:1px;background:#eaecf0;margin:16px 0"></div>
+
+      <!-- Amount + Status -->
+      <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="vertical-align:middle">
+          <span style="font-size:11px;color:#8888a0;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Amount</span>
+          <span style="display:block;font-size:24px;font-weight:700;color:#1a1a2e;letter-spacing:-0.5px;margin-top:4px">&euro;{amount:,.2f} {currency}</span>
+        </td>
+        <td style="text-align:right;vertical-align:middle">
+          <span style="display:inline-block;padding:8px 20px;background:#e8f5e9;border-radius:20px;color:#2e7d32;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase">Paid</span>
+        </td>
+      </tr>
+      </table>
+
+    </td></tr>
+    </table>
+
+    <!-- Type label -->
+    <div style="text-align:center;margin:0 0 24px">
+      <span style="font-size:12px;color:#8888a0;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">{type_label}</span>
+    </div>
+{invoice_url_section}
+    <p style="margin:0;color:#8888a0;font-size:13px;line-height:1.6;text-align:center">
+      For any questions, simply reply to this email.
+    </p>
+  </td></tr>
+
+  <!-- Divider -->
+  <tr><td style="padding:0 48px"><div style="height:1px;background:#eaecf0"></div></td></tr>
+
+  <!-- Footer -->
+  <tr><td style="padding:24px 48px 36px;text-align:center">
+    <p style="margin:0;color:#bbbbcc;font-size:12px;line-height:1.6">
+      Aetherium Web Studio &copy; 2026 &middot; All rights reserved.
+    </p>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+    return _send_email(to_email, subject, html)

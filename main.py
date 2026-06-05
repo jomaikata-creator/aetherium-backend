@@ -33,9 +33,28 @@ def _seed_admin():
         db.close()
 
 
+def _run_migrations():
+    """Add missing columns to existing tables (lightweight migration without Alembic)."""
+    import sqlalchemy as sa
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        insp = sa.inspect(engine)
+        columns = [c["name"] for c in insp.get_columns("invoices")]
+        if "stripe_hosted_url" not in columns:
+            db.execute(text("ALTER TABLE invoices ADD COLUMN stripe_hosted_url VARCHAR"))
+            db.commit()
+            print("[migrate] Added stripe_hosted_url column to invoices")
+    except Exception as e:
+        print(f"[migrate] Skipped: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
     _seed_admin()
     yield
 

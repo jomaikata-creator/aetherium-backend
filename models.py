@@ -197,6 +197,7 @@ class Invoice(Base):
     type = Column(SAEnum(InvoiceType), nullable=False)
 
     stripe_reference_id = Column(String, nullable=True)
+    stripe_hosted_url = Column(String, nullable=True)
     pdf_path = Column(String, nullable=True)
 
     status = Column(SAEnum(InvoiceStatus), default=InvoiceStatus.draft, nullable=False)

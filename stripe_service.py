@@ -56,6 +56,7 @@ def create_checkout_session(
                 "quantity": 1,
             }],
             mode="payment",
+            invoice_creation={"enabled": True},
             expires_at=int(time.time() + 86400),  # 24 hours
             success_url=success_url,
             cancel_url=cancel_url,
@@ -74,6 +75,7 @@ def create_checkout_session(
             "quantity": 1,
         }],
         mode="payment",
+        invoice_creation={"enabled": True},
         expires_at=int(time.time() + 86400),  # 24 hours
         success_url=success_url,
         cancel_url=cancel_url,

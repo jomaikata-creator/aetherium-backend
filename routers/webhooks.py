@@ -9,7 +9,9 @@ from models import (
     Subscription, SubscriptionStatus, Invoice, InvoiceType, InvoiceStatus,
 )
 from stripe_service import construct_webhook_event
-from invoice_service import generate_invoice_pdf
+from email_service import send_invoice_email
+
+import stripe as stripe_lib
 
 router = APIRouter(prefix="/api/webhooks/stripe", tags=["webhooks"])
 
@@ -26,25 +28,11 @@ def _next_invoice_number(db: Session) -> str:
     return f"{year}-{seq:04d}"
 
 
-def _generate_invoice(db: Session, project: Project, amount: float, inv_type: str, stripe_ref: str | None = None) -> Invoice:
+def _generate_invoice(db: Session, project: Project, amount: float,
+                      inv_type: str, stripe_invoice_id: str | None = None,
+                      stripe_hosted_url: str | None = None) -> Invoice:
     client = project.client
     inv_num = _next_invoice_number(db)
-
-    pdf_path = generate_invoice_pdf(
-        invoice_number=inv_num,
-        invoice_date=datetime.datetime.utcnow(),
-        client_name=client.name,
-        client_company=client.company_name,
-        client_eik=client.eik,
-        client_mol=client.mol,
-        client_vat=client.vat_number,
-        client_address=client.address,
-        project_name=project.project_name,
-        service_description="Web Design & Development",
-        amount=amount,
-        currency="EUR",
-        invoice_type=inv_type,
-    )
 
     invoice = Invoice(
         invoice_number=inv_num,
@@ -57,12 +45,43 @@ def _generate_invoice(db: Session, project: Project, amount: float, inv_type: st
         amount=amount,
         currency="EUR",
         type=InvoiceType(inv_type),
-        stripe_reference_id=stripe_ref,
-        pdf_path=pdf_path,
+        stripe_reference_id=stripe_invoice_id,
+        stripe_hosted_url=stripe_hosted_url,
         status=InvoiceStatus.issued,
     )
     db.add(invoice)
     return invoice
+
+
+def _email_invoice(invoice: Invoice, project: Project, client, invoice_type: str,
+                   service_description: str, stripe_hosted_url: str | None = None):
+    """Send the invoice email to the client."""
+    try:
+        send_invoice_email(
+            to_email=client.email,
+            client_name=client.name,
+            project_name=project.project_name,
+            amount=invoice.amount,
+            currency=invoice.currency,
+            invoice_number=invoice.invoice_number,
+            invoice_date=invoice.invoice_date.strftime("%d.%m.%Y"),
+            invoice_type=invoice_type,
+            service_description=service_description,
+            stripe_hosted_url=stripe_hosted_url,
+        )
+        print(f"[webhook] Invoice email sent to {client.email} for {invoice.invoice_number}")
+    except Exception as e:
+        print(f"[webhook] Failed to send invoice email: {e}")
+
+
+def _get_stripe_invoice_url(stripe_invoice_id: str) -> str | None:
+    """Retrieve the Stripe hosted invoice URL."""
+    try:
+        inv = stripe_lib.Invoice.retrieve(stripe_invoice_id)
+        return inv.hosted_invoice_url
+    except Exception as e:
+        print(f"[webhook] Failed to retrieve Stripe invoice {stripe_invoice_id}: {e}")
+        return None
 
 
 @router.post("")
@@ -92,7 +111,6 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             if sub:
                 sub.stripe_subscription_id = data.get("subscription")
                 sub.status = SubscriptionStatus.active
-                # Move project to maintenance
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if project and project.status == ProjectStatus.completed:
                     project.status = ProjectStatus.maintenance
@@ -119,8 +137,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             project.status = ProjectStatus.ready_to_deploy
 
         amount = data.get("amount_total", 0) / 100
-        _generate_invoice(db, project, amount, payment_type, data.get("invoice"))
+        stripe_invoice_id = data.get("invoice")
+        stripe_hosted_url = _get_stripe_invoice_url(stripe_invoice_id) if stripe_invoice_id else None
+
+        invoice = _generate_invoice(db, project, amount, payment_type, stripe_invoice_id, stripe_hosted_url)
         db.commit()
+
+        service = "Web Design & Development"
+        _email_invoice(invoice, project, project.client, payment_type, service, stripe_hosted_url)
 
     # ── Subscription payment ──
     elif event_type == "invoice.paid":
@@ -129,7 +153,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             sub = db.query(Subscription).filter(Subscription.stripe_subscription_id == subscription_id).first()
             if sub:
                 amount = data.get("amount_paid", 0) / 100
-                _generate_invoice(db, sub.project, amount, "monthly", data.get("id"))
+                stripe_hosted_url = data.get("hosted_invoice_url")
+                invoice = _generate_invoice(db, sub.project, amount, "monthly",
+                                            data.get("id"), stripe_hosted_url)
                 db.commit()
+
+                _email_invoice(invoice, sub.project, sub.project.client, "monthly",
+                              "Monthly Maintenance & Hosting", stripe_hosted_url)
 
     return {"status": "received"}
