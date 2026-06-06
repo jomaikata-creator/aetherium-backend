@@ -15,8 +15,8 @@ from auth import (
     get_current_employee, require_admin,
     get_visible_employee_ids, can_edit_project,
 )
-from stripe_service import create_checkout_session
-from email_service import send_payment_email, send_invoice_email
+from services.stripe_service import create_checkout_session
+from services.email_service import send_payment_email, send_invoice_email
 
 MONTHLY_FEE = float(os.getenv("DEFAULT_MONTHLY_FEE", "300.0"))
 

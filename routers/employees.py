@@ -54,7 +54,7 @@ def create_employee(
 
     # Send invite email only if no password was set
     if reset_token:
-        from email_service import send_invite_email
+        from services.email_service import send_invite_email
         send_invite_email(emp.email, emp.full_name, reset_token, emp.role.value)
 
     return emp

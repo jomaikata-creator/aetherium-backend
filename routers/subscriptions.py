@@ -12,8 +12,8 @@ from models import (
 )
 from schemas import CheckoutRequest
 from auth import get_current_employee, require_admin, get_visible_employee_ids
-from stripe_service import create_subscription_checkout_session
-from email_service import send_subscription_email
+from services.stripe_service import create_subscription_checkout_session
+from services.email_service import send_subscription_email
 
 router = APIRouter(prefix="/api/subscriptions", tags=["subscriptions"])
 APP_URL = os.getenv("APP_URL", "http://localhost:5175")

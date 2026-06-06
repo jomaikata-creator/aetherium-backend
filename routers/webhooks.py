@@ -8,8 +8,8 @@ from models import (
     Project, ProjectStatus, Payment, PaymentStatus as PayStatus,
     Subscription, SubscriptionStatus, Invoice, InvoiceType, InvoiceStatus,
 )
-from stripe_service import construct_webhook_event
-from email_service import send_invoice_email
+from services.stripe_service import construct_webhook_event
+from services.email_service import send_invoice_email
 
 import stripe as stripe_lib
 

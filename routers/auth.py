@@ -100,7 +100,7 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     employee.password_reset_expires = datetime.utcnow() + timedelta(hours=48)
     db.commit()
 
-    from email_service import send_invite_email
+    from services.email_service import send_invite_email
     send_invite_email(employee.email, employee.full_name, token, employee.role.value)
 
     return {"message": "If that email exists, a reset link has been sent."}
